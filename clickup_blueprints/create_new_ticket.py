@@ -62,8 +62,8 @@ def create_task(list_id, token, name, description, status, priority,
         return response.json()
         
     elif response.status_code == 401: # Permissions Error
-        print("You do not have the required permissions to create an task in ",
-              "this project")
+        print("Clickup permissions error: check if token is correct",
+              f"and you have access to the specified list: {list_id}")
         sys.exit(exit_codes.INVALID_CREDENTIALS)
 
     elif response.status_code == 400: # Bad Request
