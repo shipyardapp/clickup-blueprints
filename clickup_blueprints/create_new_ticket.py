@@ -30,7 +30,7 @@ def get_args():
 
 def create_task(list_id, token, name, description, status, priority,
                 due_date=None, custom_fields=None):
-    """ Triggers the Create Task API and adds a new task onto CLickUp
+    """ Triggers the Create Task API and adds a new task onto ClickUp
     see: https://jsapi.apiary.io/apis/clickup20/reference/0/tasks/create-task.html
     """
     
