@@ -21,8 +21,7 @@ def get_args():
     parser.add_argument('--access-token', dest='access_token', required=True)
     parser.add_argument('--name', dest='name', required=True)
     parser.add_argument('--description', dest='description', required=True)
-    parser.add_argument('--status', dest='status', required=True)
-    parser.add_argument('--priority', dest='priority', required=True)
+    parser.add_argument('--priority', dest='priority', required=False)
     parser.add_argument('--due-date', dest='due_date', required=False)
     parser.add_argument('--custom-json', dest='custom_json', required=False)
     args = parser.parse_args()
@@ -44,7 +43,6 @@ def create_task(list_id, token, name, description, status, priority,
     payload = {
       "name": name,
       "description": description,
-      "status": status,
       "priority": priority,
       "due_date": due_date,
       "notify_all": True,
@@ -55,7 +53,7 @@ def create_task(list_id, token, name, description, status, priority,
 
     response = requests.post(create_task_api, 
                              headers=headers, 
-                             data=payload
+                             json=payload
                              )
     
     if response.status_code == 200: # created successfuly
@@ -88,10 +86,9 @@ def main():
     name = args.name
     description = args.description
     priority = args.priority
-    status = args.status
     due_date = args.due_date
     custom_fields = args.custom_json
-    task_data = create_task(list_id, access_token, name, description, status,
+    task_data = create_task(list_id, access_token, name, description,
                 priority, due_date, custom_fields)
     task_id = task_data['id']
     
