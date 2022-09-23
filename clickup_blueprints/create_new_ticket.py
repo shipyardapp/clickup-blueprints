@@ -17,7 +17,7 @@ shipyard.logs.create_artifacts_folders(artifact_subfolder_paths)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--list-id', dest='jira_url', required=True)
+    parser.add_argument('--list-id', dest='list_id', required=True)
     parser.add_argument('--access-token', dest='access_token', required=True)
     parser.add_argument('--name', dest='name', required=True)
     parser.add_argument('--description', dest='description', required=True)
