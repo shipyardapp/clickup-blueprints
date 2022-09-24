@@ -17,7 +17,7 @@ shipyard.logs.create_artifacts_folders(artifact_subfolder_paths)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--list-id', dest='list_id', required=True)
+    parser.add_argument('--task-id', dest='task_id', required=True)
     parser.add_argument('--access-token', dest='access_token', required=True)
     parser.add_argument('--name', dest='name', required=True)
     parser.add_argument('--description', dest='description', required=True)
@@ -28,13 +28,13 @@ def get_args():
     return args
 
 
-def create_task(list_id, token, name, description, status, priority,
+def update_task(task_id, token, name, description, status, priority,
                 due_date=None, custom_fields=None):
-    """ Triggers the Create Task API and adds a new task onto ClickUp
-    see: https://jsapi.apiary.io/apis/clickup20/reference/0/tasks/create-task.html
+    """ Triggers the Update Task API and changes the data
+    see: https://jsapi.apiary.io/apis/clickup20/reference/0/tasks/update-task.html
     """
     
-    create_task_api = f"https://api.clickup.com/api/v2/list/{list_id}/task"
+    update_task_api = f"https://api.clickup.com/api/v2/task/{task_id}/"
     headers = {
       'Authorization': token,
       'Content-Type': 'application/json'
@@ -45,25 +45,22 @@ def create_task(list_id, token, name, description, status, priority,
       "description": description,
       "priority": priority,
       "due_date": due_date,
-      "notify_all": True,
-      "check_required_custom_fields": True,
     }
     if custom_fields:
-        payload['custom_fields'] = custom_fields
+        payload.update(custom_fields)
 
-    response = requests.post(create_task_api, 
+    response = requests.put(update_task_api, 
                              headers=headers, 
                              json=payload
                              )
     
     if response.status_code == 200: # created successfuly
-        task_id =  response.json()['id']
-        print(f"Task created successfully with task name: {task_id}")
+        print(f"Task {task_id} updated successfully")
         return response.json()
         
     elif response.status_code == 401: # Permissions Error
         print("Clickup permissions error: check if token is correct",
-              f"and you have access to the specified list: {list_id}")
+              f"and you have access to the modify task: {task_id}")
         sys.exit(exit_codes.INVALID_CREDENTIALS)
 
     elif response.status_code == 400: # Bad Request
@@ -82,20 +79,19 @@ def create_task(list_id, token, name, description, status, priority,
 def main():
     args = get_args()
     access_token = args.access_token
-    list_id = args.list_id
+    task_id = args.task_id
     name = args.name
     description = args.description
     priority = args.priority
     due_date = args.due_date
     custom_fields = args.custom_json
-    task_data = create_task(list_id, access_token, name, description,
+    task_data = update_task(task_id, access_token, name, description,
                 priority, due_date, custom_fields)
-    task_id = task_data['id']
     
     # save task response to responses artifacts
     task_data_filename = shipyard.files.combine_folder_and_file_name(
         artifact_subfolder_paths['responses'],
-        f'create_ticket_{task_id}_response.json')
+        f'update_ticket_{task_id}_response.json')
     shipyard.files.write_json_to_file(task_data, task_data_filename)
 
     
