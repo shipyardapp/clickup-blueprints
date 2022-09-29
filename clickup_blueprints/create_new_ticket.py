@@ -1,6 +1,9 @@
 import argparse
 import sys
 import requests
+import re
+from datetime import datetime
+from ast import literal_eval
 import shipyard_utils as shipyard
 try:
     import exit_codes
@@ -22,14 +25,33 @@ def get_args():
     parser.add_argument('--name', dest='name', required=True)
     parser.add_argument('--description', dest='description', required=True)
     parser.add_argument('--priority', dest='priority', required=False)
+    parser.add_argument('--status', dest='status', required=False)
     parser.add_argument('--due-date', dest='due_date', required=False)
+    parser.add_argument('--start-date', dest='start_date', required=False)
+    parser.add_argument('--assigness', dest='assignees', required=False)
+    parser.add_argument('--time_estimate', dest='time_estimate', required=False)
+    parser.add_argument('--tags', dest='tags', required=False)
     parser.add_argument('--custom-json', dest='custom_json', required=False)
+    parser.add_argument(
+        '--source-file-name',
+        dest='source_file_name',
+        required=False)
+    parser.add_argument(
+        '--source-folder-name',
+        dest='source_folder_name',
+        default='',
+        required=False)
+    parser.add_argument('--source-file-name-match-type',
+                        dest='source_file_name_match_type',
+                        choices={'exact_match', 'regex_match'},
+                        default='exact_match',
+                        required=False)
     args = parser.parse_args()
     return args
 
 
-def create_task(list_id, token, name, description, status, priority,
-                due_date=None, custom_fields=None):
+def create_task(list_id, token, name, description, assignees=[], tags=[], status=None, priority=None,
+                due_date=None, time_estimate=None, start_date=None, custom_fields=None):
     """ Triggers the Create Task API and adds a new task onto ClickUp
     see: https://jsapi.apiary.io/apis/clickup20/reference/0/tasks/create-task.html
     """
@@ -39,16 +61,22 @@ def create_task(list_id, token, name, description, status, priority,
       'Authorization': token,
       'Content-Type': 'application/json'
     }
-    
     payload = {
-      "name": name,
-      "description": description,
-      "priority": priority,
-      "due_date": due_date,
-      "notify_all": True,
-      "check_required_custom_fields": True,
+        "name": name,
+        "description": description,
+        "assignees": assignees,
+        "tags": tags,
+        "status": status,
+        "due_date": due_date,
+        "time_estimate": time_estimate,
+        "notify_all": True,
     }
+    if start_date:
+        payload['start_date'] = start_date
+    if priority:
+        payload['priority'] = priority
     if custom_fields:
+        payload['check_required_custom_fields'] = True
         payload['custom_fields'] = custom_fields
 
     response = requests.post(create_task_api, 
@@ -77,7 +105,51 @@ def create_task(list_id, token, name, description, status, priority,
             f"{response.text}"
         )
         sys.exit(exit_codes.UNKNOWN_ERROR)
-    
+
+
+def upload_file_attachment(token, task_id, file_path):
+    """ Uploads files to Clickup API """
+
+    upload_endpoint = f"https://api.clickup.com/api/v2/task/{task_id}/attachment"
+
+    headers = {
+      'Content-Type': 'multipart/form-data',
+      "Authorization": token
+    }
+    file_payload = {
+        "file": (file_path, open(file_path, "rb"), "application-type")
+    }
+    response = requests.post(upload_endpoint,
+                             headers=headers,
+                             files=file_payload)
+
+    if response.status_code == 200:
+        print(f'{file_path} was successfully uploaded to {task_id}')
+    return response.json()
+
+
+def get_member_ids_from_names(token, list_id, members):
+    """Gets the Clickup Member id given array of members names and list ID"""
+    get_url = f"https://api.clickup.com/api/v2/list/{list_id}/member"
+
+    headers = {
+        "Authorization": token
+    }
+    get_response = requests.get(get_url, headers=headers)
+    if get_response.status_code == 200:
+        member_data = get_response.json()
+        # find and return the label
+        member_ids = [
+            member['id'] for member in member_data if member['name'] in members
+        ]
+        return member_ids
+
+
+def date_to_epoch_time(shipyard_date):
+    """ Converts a Shipayrd formatted date to epoch time"""
+    str_as_date = datetime.strptime(shipyard_date, '%m/%d/%Y')
+    converted_date = int(str_as_date.timestamp())
+    return converted_date
 
 def main():
     args = get_args()
@@ -86,12 +158,63 @@ def main():
     name = args.name
     description = args.description
     priority = args.priority
-    due_date = args.due_date
+    if args.due_date:
+        due_date = date_to_epoch_time(args.due_date)
+    else:
+        due_date = None
+    if args.start_date:
+        start_date = date_to_epoch_time(args.start_date)
+    else: 
+        start_date = None
+    source_file_name = args.source_file_name
+    source_folder_name = args.source_folder_name
+    source_file_name_match_type = args.source_file_name_match_type
     custom_fields = args.custom_json
-    task_data = create_task(list_id, access_token, name, description,
-                priority, due_date, custom_fields)
+    if args.assignees:
+        assignees = get_member_ids_from_names(
+                            access_token, 
+                            list_id, 
+                            literal_eval(args.assignees))
+    else:
+        assignees=[]
+    
+    if args.tags:
+        tags = literal_eval(args.tags)
+    else:
+        tags = []
+
+    task_data = create_task(
+                    list_id, 
+                    access_token, 
+                    name, 
+                    description, 
+                    assignees, 
+                    tags, 
+                    args.status, 
+                    priority,
+                    due_date, 
+                    args.time_estimate, 
+                    start_date, 
+                    custom_fields)
+
     task_id = task_data['id']
     
+    if source_file_name_match_type == 'regex_match':
+        all_local_files = shipyard.files.find_all_local_file_names(
+            source_folder_name)
+        matching_file_names = shipyard.files.find_all_file_matches(
+            all_local_files, re.compile(source_file_name))
+        for index, file_name in enumerate(matching_file_names):
+            upload_file_attachment(access_token, 
+                                task_id,
+                                file_name)
+    else:
+        source_file_path = shipyard.files.combine_folder_and_file_name(
+            source_folder_name, source_file_name)
+        upload_file_attachment(access_token, 
+                            task_id,
+                            source_file_path)
+
     # save task response to responses artifacts
     task_data_filename = shipyard.files.combine_folder_and_file_name(
         artifact_subfolder_paths['responses'],
